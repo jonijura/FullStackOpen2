@@ -18,24 +18,6 @@ morgan.token('content', function (req, res) {
     return ' '
 })
 
-let persons = [
-    {
-        "name": "Ada Lovelace",
-        "number": "39-44-5323523",
-        "id": 2
-    },
-    {
-        "name": "Mary Poppendieck",
-        "number": "39-23-6423122",
-        "id": 4
-    },
-    {
-        "name": "mika12",
-        "number": "04504888",
-        "id": 5
-    }
-]
-
 app.get('/', (req, res) => {
     res.send('<h1>Hello World!</h1>')
 })
@@ -50,57 +32,66 @@ app.get('/api/persons', (req, res) => {
 app.get('/info', (req, res) => {
     const date = new Date().toString();
     const response = "<div>" +
-        `<p>Phonebook has info for ${persons.length} people</p>` +
+        `<p>Phonebook has info for [TODO check database] people</p>` +
         `<p>${date}</p>` +
         "</div>"
 
     res.send(response)
 })
 
-app.get('/api/persons/:id', (request, response) => {
-    const id = Number(request.params.id)
-    const person = persons.find(p => p.id === id)
-    if (person) response.json(person)
-    else response.status(404).end()
+app.get('/api/persons/:id', (req, res, next) => {
+    Person.findById(req.params.id)
+    .then(person => {
+        if(!person)res.status(404).end()
+        else {res.json(person)}
+    })
+    .catch(error => next(error))
 })
 
 //poisto tietokannasta
 app.delete('/api/persons/:id', (request, response, next) => {
-    // const id = Number(request.params.id)
     Person.findByIdAndRemove(request.params.id)
         .then(res => {
             response.status(204).end()
         })
         .catch(error => next(error))
-    // persons = persons.filter(p => p.id !== id)
-    // response.status(204).end()
 })
 
-//lisää myös tietokantaan, siistittävää jäljellä
-app.post('/api/persons', (request, response) => {
+//lisää tietokantaan
+app.post('/api/persons', (request, response, next) => {
     const body = request.body
     if (!body.name || !body.number) {
         return response.status(400).json({
             error: 'content missing'
         })
     }
-    if (persons.find(p => p.name === body.name)) {//TODO update to check database
-        return response.status(400).json({
-            error: 'name already exists'
-        })
+    Person.find({name: body.name}).then(result =>{
+        if(result.length>0)next(new Error('Person was already found in database'))
+        else{
+            const person = new Person({
+                name: body.name,
+                number: body.number
+            })
+            person.save().then(result => {
+                console.log('person saved!')
+            })
+        
+            response.json(person)
+        }
+    })
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+    const person = {
+        name: req.body.name,
+        number: req.body.number
     }
-
-    const person = new Person({
-        name: body.name,
-        number: body.number
+    Person.findByIdAndUpdate(req.params.id, person, {new: true})
+    .then(updatedPerson => {
+        if(!updatedPerson)next(new Error('Person was already removed from database'))
+        else {res.json(updatedPerson)}
     })
-
-    // persons = persons.concat(person) no longer needed
-    person.save().then(result => {
-        console.log('person saved!')
-    })
-
-    response.json(person)
+    .catch(error => next(error))
 })
 
 const errorHandler = (error, request, response, next) => {
